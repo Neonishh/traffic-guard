@@ -72,6 +72,26 @@ CREATE TABLE Appeal (
     FOREIGN KEY (Violation_ID) REFERENCES Violation(Violation_ID),
     FOREIGN KEY (Driver_ID) REFERENCES Driver(Driver_ID)
 );
+
+CREATE TABLE IF NOT EXISTS Violation_Type (
+    ViolationType_ID INT PRIMARY KEY AUTO_INCREMENT,
+    Type_Name VARCHAR(50) UNIQUE NOT NULL,
+    Default_Amount DECIMAL(10,2) NOT NULL,
+    Default_Demerit_Points INT DEFAULT 0,
+    Default_Duedays INT DEFAULT 30,
+    Description VARCHAR(255)
+);
+
+CREATE TABLE IF NOT EXISTS Audit_Log (
+    Audit_ID INT PRIMARY KEY AUTO_INCREMENT,
+    Action VARCHAR(20),
+    Table_Name VARCHAR(50),
+    Record_ID INT,
+    Action_By VARCHAR(100),
+    Action_Time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    Details TEXT
+);
+
 --Driver Table Inserts
 INSERT INTO Driver VALUES (1, 'Arun Kumar', 'Bangalore', '9876543210', 'KA05AB1234');
 INSERT INTO Driver VALUES (2, 'Meera Nair', 'Mysore', '9988776655', 'KA09CD5678');
