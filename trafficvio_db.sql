@@ -475,6 +475,42 @@ BEGIN
 END$$
 
 DELIMITER ;
+
+-- JOIN Query: Get Violation Details with Driver and Vehicle Info
+SELECT 
+    v.Violation_ID,
+    v.Date_Time,
+    v.Type AS Violation_Type,
+    v.Location,
+    d.Name AS Driver_Name,
+    d.License_no,
+    ve.License_plate,
+    ve.Model,
+    o.Name AS Officer_Name,
+    p.Amount AS Fine_Amount,
+    p.Status AS Payment_Status
+FROM Violation v
+JOIN Vehicle ve ON v.Vehicle_ID = ve.Vehicle_ID
+JOIN Driver d ON ve.Driver_ID = d.Driver_ID
+JOIN Officer o ON v.Officer_ID = o.Officer_ID
+LEFT JOIN Penalty p ON v.Violation_ID = p.Violation_ID
+ORDER BY v.Date_Time DESC;
+
+-- AGGREGATE Query: Revenue and Violation Statistics
+SELECT 
+    COUNT(DISTINCT d.Driver_ID) AS Total_Drivers,
+    COUNT(v.Violation_ID) AS Total_Violations,
+    SUM(p.Amount) AS Total_Revenue,
+    AVG(p.Amount) AS Average_Fine,
+    MAX(p.Amount) AS Highest_Fine,
+    MIN(p.Amount) AS Lowest_Fine,
+    SUM(CASE WHEN p.Status = 'Paid' THEN p.Amount ELSE 0 END) AS Revenue_Collected,
+    SUM(CASE WHEN p.Status = 'Unpaid' THEN p.Amount ELSE 0 END) AS Revenue_Pending
+FROM Driver d
+JOIN Vehicle ve ON d.Driver_ID = ve.Driver_ID
+JOIN Violation v ON ve.Vehicle_ID = v.Vehicle_ID
+JOIN Penalty p ON v.Violation_ID = p.Violation_ID;
+
 select * from Driver;
 select * from Vehicle;
 select * from payment;
