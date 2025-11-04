@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS Violation_Type (
     Default_Amount DECIMAL(10,2) NOT NULL,
     Default_Demerit_Points INT DEFAULT 0,
     Default_Duedays INT DEFAULT 30,
-    Description VARCHAR(255)
+    Description VARCHAR(255)
 );
 
 CREATE TABLE IF NOT EXISTS Audit_Log (
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS Audit_Log (
     Record_ID INT,
     Action_By VARCHAR(100),
     Action_Time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    Details TEXT
+    Details TEXT
 );
 
 --Driver Table Inserts

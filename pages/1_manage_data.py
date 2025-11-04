@@ -3,9 +3,9 @@ import streamlit as st
 from database import Database
 import pandas as pd
 from datetime import datetime, date
+db = Database(st.session_state.get('db_user'), st.session_state.get('db_pass'))
 
 st.set_page_config(page_title="Manage Data", page_icon="📝", layout="wide")
-db = Database()
 
 st.title("📝 Data Management")
 st.markdown("---")
