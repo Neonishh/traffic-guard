@@ -22,7 +22,7 @@ class Database:
         except Error as e:
             st.error(f"Database connection error: {e}")
             return None
-
+    
     def execute_query(self, query, params=None):
         connection = self.get_connection()
         if connection:
@@ -37,7 +37,7 @@ class Database:
                 cursor.close()
                 connection.close()
         return False, "Connection failed"
-
+    
     def fetch_data(self, query, params=None):
         connection = self.get_connection()
         if connection:
@@ -53,7 +53,51 @@ class Database:
                 cursor.close()
                 connection.close()
         return []
-
+    
+    def check_dependencies(self, table, id_column, id_value):
+        """Check if record has violations (blocking deletion)"""
+        connection = self.get_connection()
+        if connection:
+            try:
+                cursor = connection.cursor(dictionary=True)
+                dependencies = []
+                
+                if table == 'Driver':
+                    # Check if driver's vehicles have violations
+                    cursor.execute("""
+                        SELECT COUNT(*) as count 
+                        FROM Violation v
+                        JOIN Vehicle ve ON v.Vehicle_ID = ve.Vehicle_ID
+                        WHERE ve.Driver_ID = %s
+                    """, (id_value,))
+                    violation_count = cursor.fetchone()['count']
+                    if violation_count > 0:
+                        dependencies.append(f"{violation_count} violation(s) on their vehicles")
+                
+                elif table == 'Vehicle':
+                    # Check violations for this vehicle
+                    cursor.execute("SELECT COUNT(*) as count FROM Violation WHERE Vehicle_ID = %s", (id_value,))
+                    violation_count = cursor.fetchone()['count']
+                    if violation_count > 0:
+                        dependencies.append(f"{violation_count} violation(s)")
+                
+                elif table == 'Officer':
+                    # Check violations recorded by officer
+                    cursor.execute("SELECT COUNT(*) as count FROM Violation WHERE Officer_ID = %s", (id_value,))
+                    violation_count = cursor.fetchone()['count']
+                    if violation_count > 0:
+                        dependencies.append(f"{violation_count} violation(s) recorded")
+                
+                return dependencies
+                
+            except Error as e:
+                st.error(f"Error: {e}")
+                return []
+            finally:
+                cursor.close()
+                connection.close()
+        return []
+    
     def call_procedure(self, proc_name, args):
         connection = self.get_connection()
         if connection:
@@ -61,9 +105,11 @@ class Database:
                 cursor = connection.cursor()
                 result = cursor.callproc(proc_name, args)
                 connection.commit()
+                
                 results = []
                 for result_cursor in cursor.stored_results():
                     results.extend(result_cursor.fetchall())
+                
                 return True, result, results
             except Error as e:
                 return False, str(e), []
