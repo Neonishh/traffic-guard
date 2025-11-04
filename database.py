@@ -55,7 +55,7 @@ class Database:
         return []
     
     def check_dependencies(self, table, id_column, id_value):
-        """Check if record has violations (blocking deletion)"""
+        """Check if record has violations or other dependencies (blocking deletion)"""
         connection = self.get_connection()
         if connection:
             try:
@@ -63,7 +63,7 @@ class Database:
                 dependencies = []
                 
                 if table == 'Driver':
-                    # Check if driver's vehicles have violations
+                    # Check 1: Violations on their vehicles (Current Business Rule Check)
                     cursor.execute("""
                         SELECT COUNT(*) as count 
                         FROM Violation v
@@ -73,6 +73,17 @@ class Database:
                     violation_count = cursor.fetchone()['count']
                     if violation_count > 0:
                         dependencies.append(f"{violation_count} violation(s) on their vehicles")
+                    
+                    # Check 2: Appeals referencing this driver (Missing FK Check - Appeal does not CASCADE)
+                    cursor.execute("""
+                        SELECT COUNT(*) as count 
+                        FROM Appeal
+                        WHERE Driver_ID = %s
+                    """, (id_value,))
+                    appeal_count = cursor.fetchone()['count']
+                    if appeal_count > 0:
+                        dependencies.append(f"{appeal_count} appeal(s) filed")
+
                 
                 elif table == 'Vehicle':
                     # Check violations for this vehicle

@@ -72,12 +72,14 @@ with tab1:
                         else:
                             st.error(f"{msg}")
     
+    # In 1_manage_data.py (for Driver deletion, around line 110)
     # Delete driver - WITH DEPENDENCY CHECK
     with st.expander("🗑️ Delete Driver"):
         if drivers:
             opts = {f"ID {d['Driver_ID']}: {d['Name']}": d['Driver_ID'] for d in drivers}
             to_del = st.selectbox("Select Driver", opts.keys(), key="del_d")
             
+            # --- Dependency Check Button ---
             if st.button("Check if Safe to Delete", key="check_driver"):
                 did = opts[to_del]
                 
@@ -88,32 +90,46 @@ with tab1:
                 if vehicle_count > 0:
                     st.info(f"ℹ️ This driver has {vehicle_count} vehicle(s). They will be deleted automatically (CASCADE).")
                 
-                # Check for violations (blocks deletion)
+                # Check for dependencies (Violations and Appeals)
                 deps = db.check_dependencies('Driver', 'Driver_ID', did)
                 
                 if deps:
                     st.error(f"❌ Cannot delete! {', '.join(deps)}")
-                    st.info("💡 Delete or resolve violations first")
+                    st.info("💡 Delete or resolve dependencies (Violations/Appeals) first")
                 else:
                     st.success("✅ Safe to delete!")
             
-            if st.button("Delete Driver", key="del_drv_btn") and st.checkbox("Confirm deletion", key="conf_del_drv"):
-                did = opts[to_del]
-                
-                # Final check before deleting
-                deps = db.check_dependencies('Driver', 'Driver_ID', did)
-                
-                if deps:
-                    st.error(f"❌ Cannot delete! {', '.join(deps)}")
-                else:
-                    query = "DELETE FROM Driver WHERE Driver_ID=%s"
-                    success, msg = db.execute_query(query, (did,))
-                    if success:
-                        st.success("✅ Driver deleted successfully!")
-                        st.info("ℹ️ All vehicles owned by this driver were also deleted")
-                        st.rerun()
+            # --- Deletion Block ---
+            did = opts[to_del]
+            if st.button("Delete Driver", key="del_drv_btn"):
+                # Always confirm before processing
+                if st.session_state.get('confirm_delete_driver', False):
+                    
+                    # Final check before deleting (Using the improved check_dependencies from previous answer)
+                    deps = db.check_dependencies('Driver', 'Driver_ID', did)
+                    
+                    if deps:
+                        st.error(f"❌ Cannot delete! {', '.join(deps)}")
                     else:
-                        st.error(f"{msg}")
+                        query = "DELETE FROM Driver WHERE Driver_ID=%s"
+                        success, msg = db.execute_query(query, (did,))
+                        if success:
+                            st.success("✅ Driver deleted successfully!")
+                            st.info("ℹ️ All vehicles owned by this driver were also deleted")
+                            st.session_state.confirm_delete_driver = False # Reset confirmation
+                            st.rerun()
+                        else:
+                            # Crucial: This now runs INSIDE the button block
+                            st.error(f"Failed to delete (DB Error): {msg}") 
+                else:
+                    # Request confirmation on first click
+                    st.session_state.confirm_delete_driver = True
+                    st.warning("Click 'Confirm' below to finalize deletion.")
+                    st.rerun() # Rerun to show confirmation UI
+
+            # --- Confirmation Checkbox UI (Separate from the button logic) ---
+            if st.session_state.get('confirm_delete_driver', False):
+                st.checkbox("Confirm deletion (Final Step)", value=False, key="final_conf_drv")
 
 # ==================== VEHICLES ====================
 with tab2:
