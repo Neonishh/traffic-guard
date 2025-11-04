@@ -411,6 +411,11 @@ GRANT SELECT ON TrafficVioDB.* TO 'viewer'@'localhost';
 
 FLUSH PRIVILEGES;
 
+-- Grant INSERT privilege to the viewer user for Payment and Appeal tables
+GRANT INSERT ON TrafficVioDB.Payment TO 'viewer'@'localhost';
+GRANT INSERT ON TrafficVioDB.Appeal TO 'viewer'@'localhost';
+
+FLUSH PRIVILEGES;
 -- Get Summary Report for Violations by City (JOIN + AGGREGATE)
 DELIMITER $$
 CREATE PROCEDURE GetViolationSummary()

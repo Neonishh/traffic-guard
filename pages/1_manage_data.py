@@ -72,17 +72,20 @@ with tab1:
                         else:
                             st.error(f"{msg}")
     
-    # In 1_manage_data.py (for Driver deletion, around line 110)
     # Delete driver - WITH DEPENDENCY CHECK
+    # --- START OF CORRECTED DELETION LOGIC (Driver) ---
     with st.expander("🗑️ Delete Driver"):
         if drivers:
             opts = {f"ID {d['Driver_ID']}: {d['Name']}": d['Driver_ID'] for d in drivers}
             to_del = st.selectbox("Select Driver", opts.keys(), key="del_d")
             
-            # --- Dependency Check Button ---
+            # Use session state for confirmation
+            if 'confirm_delete_driver' not in st.session_state:
+                st.session_state.confirm_delete_driver = False
+
+            did = opts[to_del]
+            
             if st.button("Check if Safe to Delete", key="check_driver"):
-                did = opts[to_del]
-                
                 # Show vehicle count (will be CASCADE deleted)
                 vehicles = db.fetch_data("SELECT COUNT(*) as count FROM Vehicle WHERE Driver_ID = %s", (did,))
                 vehicle_count = vehicles[0]['count'] if vehicles else 0
@@ -90,22 +93,20 @@ with tab1:
                 if vehicle_count > 0:
                     st.info(f"ℹ️ This driver has {vehicle_count} vehicle(s). They will be deleted automatically (CASCADE).")
                 
-                # Check for dependencies (Violations and Appeals)
+                # Check for violations/appeals (blocks deletion)
                 deps = db.check_dependencies('Driver', 'Driver_ID', did)
                 
                 if deps:
                     st.error(f"❌ Cannot delete! {', '.join(deps)}")
+                    st.session_state.confirm_delete_driver = False
                     st.info("💡 Delete or resolve dependencies (Violations/Appeals) first")
                 else:
                     st.success("✅ Safe to delete!")
+                    st.session_state.confirm_delete_driver = True
             
-            # --- Deletion Block ---
-            did = opts[to_del]
-            if st.button("Delete Driver", key="del_drv_btn"):
-                # Always confirm before processing
-                if st.session_state.get('confirm_delete_driver', False):
-                    
-                    # Final check before deleting (Using the improved check_dependencies from previous answer)
+            if st.session_state.confirm_delete_driver:
+                if st.button("Delete Driver (Confirm)", key="del_drv_btn"):
+                    # Re-run check just in case, though it should be safe
                     deps = db.check_dependencies('Driver', 'Driver_ID', did)
                     
                     if deps:
@@ -116,20 +117,14 @@ with tab1:
                         if success:
                             st.success("✅ Driver deleted successfully!")
                             st.info("ℹ️ All vehicles owned by this driver were also deleted")
-                            st.session_state.confirm_delete_driver = False # Reset confirmation
+                            st.session_state.confirm_delete_driver = False 
                             st.rerun()
                         else:
-                            # Crucial: This now runs INSIDE the button block
-                            st.error(f"Failed to delete (DB Error): {msg}") 
-                else:
-                    # Request confirmation on first click
-                    st.session_state.confirm_delete_driver = True
-                    st.warning("Click 'Confirm' below to finalize deletion.")
-                    st.rerun() # Rerun to show confirmation UI
+                            st.error(f"Failed to delete (DB Error): {msg}")
+            elif st.session_state.get('check_driver') and not st.session_state.confirm_delete_driver:
+                 st.info("Click 'Check if Safe to Delete' first, then confirm the deletion.")
 
-            # --- Confirmation Checkbox UI (Separate from the button logic) ---
-            if st.session_state.get('confirm_delete_driver', False):
-                st.checkbox("Confirm deletion (Final Step)", value=False, key="final_conf_drv")
+    # --- END OF CORRECTED DELETION LOGIC (Driver) ---
 
 # ==================== VEHICLES ====================
 with tab2:
@@ -181,7 +176,7 @@ with tab2:
         if vehicles:
             dlist = db.fetch_data("SELECT Driver_ID, Name FROM Driver")
             vopts = {f"ID {v['Vehicle_ID']}: {v['License_plate']}": v['Vehicle_ID'] for v in vehicles}
-            sel = st.selectbox("Select Vehicle", vopts.keys())
+            sel = st.selectbox("Select Vehicle", vopts.keys(), key="upd_veh_sel")
             
             if sel:
                 vid = vopts[sel]
@@ -220,23 +215,33 @@ with tab2:
                 if deps:
                     st.error(f"❌ Cannot delete! {', '.join(deps)}")
                     st.info("💡 Delete violations first")
+                    st.session_state.confirm_delete_vehicle = False
                 else:
                     st.success("✅ Safe to delete!")
+                    st.session_state.confirm_delete_vehicle = True
             
-            if st.button("Delete Vehicle", key="del_veh_btn") and st.checkbox("Confirm", key="conf_v"):
-                vid = vopts[to_del]
-                deps = db.check_dependencies('Vehicle', 'Vehicle_ID', vid)
-                
-                if deps:
-                    st.error(f"❌ Cannot delete! {', '.join(deps)}")
-                else:
-                    query = "DELETE FROM Vehicle WHERE Vehicle_ID=%s"
-                    success, msg = db.execute_query(query, (vid,))
-                    if success:
-                        st.success("✅ Vehicle deleted!")
-                        st.rerun()
+            if 'confirm_delete_vehicle' not in st.session_state:
+                 st.session_state.confirm_delete_vehicle = False
+                 
+            if st.session_state.confirm_delete_vehicle:
+                if st.button("Delete Vehicle (Confirm)", key="del_veh_btn"):
+                    vid = vopts[to_del]
+                    deps = db.check_dependencies('Vehicle', 'Vehicle_ID', vid)
+                    
+                    if deps:
+                        st.error(f"❌ Cannot delete! {', '.join(deps)}")
                     else:
-                        st.error(f"{msg}")
+                        query = "DELETE FROM Vehicle WHERE Vehicle_ID=%s"
+                        success, msg = db.execute_query(query, (vid,))
+                        if success:
+                            st.success("✅ Vehicle deleted!")
+                            st.session_state.confirm_delete_vehicle = False
+                            st.rerun()
+                        else:
+                            st.error(f"{msg}")
+            elif st.session_state.get('check_veh') and not st.session_state.confirm_delete_vehicle:
+                 st.info("Click 'Check if Safe to Delete' first, then confirm the deletion.")
+
 
 # ==================== OFFICERS ====================
 with tab3:
@@ -412,6 +417,46 @@ with tab6:
     
     st.markdown("---")
     
+    # --- PROCESS APPEAL SECTION (NEW) ---
+    if st.session_state.db_user == 'admin_user':
+        with st.expander("⚖️ Process Appeal (Admin Only)"):
+            
+            pending_appeals = [a for a in appeals if a['Status'] == 'Pending']
+            
+            if not pending_appeals:
+                st.info("No pending appeals to process.")
+            else:
+                popts = {f"ID {a['Appeal_ID']}: {a['Driver']} - {a['Type']} - Reason: {a['Reason'][:50]}...": 
+                        a['Appeal_ID'] for a in pending_appeals}
+                
+                sel_appeal = st.selectbox("Select Pending Appeal", popts.keys())
+                
+                # Retrieve the full reason for display
+                appeal_id_selected = popts[sel_appeal]
+                full_reason = next(a['Reason'] for a in pending_appeals if a['Appeal_ID'] == appeal_id_selected)
+                
+                st.info(f"**Full Reason:** {full_reason}")
+                
+                action = st.radio("Decision", ["Accept", "Reject"], index=None)
+                
+                if st.button("Finalize Decision", type="primary"):
+                    if action is None:
+                        st.error("Please select a decision.")
+                    else:
+                        new_status = 'Accepted' if action == 'Accept' else 'Rejected'
+                        
+                        # Update the Appeal status
+                        query = "UPDATE Appeal SET Status = %s WHERE Appeal_ID = %s"
+                        success, msg = db.execute_query(query, (new_status, appeal_id_selected))
+                        
+                        if success:
+                            st.success(f"✅ Appeal ID {appeal_id_selected} {action}ed!")
+                            st.info(f"🔔 Penalty status automatically updated to '{new_status}' (by trigger)!")
+                            st.rerun()
+                        else:
+                            st.error(f"{msg}")
+    # --- END PROCESS APPEAL SECTION ---
+    
     with st.expander("📝 File Appeal"):
         eligible = db.fetch_data("""
             SELECT v.Violation_ID, v.Type, v.Date_Time,
@@ -430,7 +475,7 @@ with tab6:
             vopts = {f"ID {v['Violation_ID']}: {v['Name']} - {v['Type']} on {str(v['Date_Time'])[:10]} - ₹{v['Amount']}": 
                     (v['Violation_ID'], v['Driver_ID']) for v in eligible}
             
-            selected = st.selectbox("Select Violation*", vopts.keys())
+            selected = st.selectbox("Select Violation*", vopts.keys(), key="file_app_sel")
             reason = st.text_area("Reason* (min 10 chars)", height=100)
             
             if st.button("📤 Submit Appeal", type="primary"):
