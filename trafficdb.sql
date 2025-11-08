@@ -43,7 +43,7 @@ CREATE TABLE Violation (
 
 -- 5. Penalty Table
 CREATE TABLE Penalty (
-    Penalty_ID INT PRIMARY KEY,
+    Penalty_ID INT PRIMARY KEY AUTO_INCREMENT, -- ADD AUTO_INCREMENT HERE
     Amount DECIMAL(10,2) NOT NULL,
     Duedate DATE,
     Status VARCHAR(20) CHECK (Status IN ('Unpaid','Paid','Appealed')),
@@ -125,3 +125,55 @@ INSERT INTO Payment VALUES (502, '2025-09-21', 1500, 'Cash', 401);
 INSERT INTO Appeal VALUES (601, '2025-09-15', 'Pending', 'Emergency situation', 304, 3);
 INSERT INTO Appeal VALUES (602, '2025-09-19', 'Rejected', 'Wrong parking sign', 303, 2);
 
+INSERT INTO Violation_Type (Type_Name, Default_Amount, Default_Demerit_Points, Default_Duedays, Description)
+VALUES
+('Speeding', 1000, 2, 30, 'Exceeding speed limit'),
+('Signal Jump', 1500, 3, 30, 'Jumping red traffic signal'),
+('Parking Violation', 500, 1, 30, 'Illegal parking or wrong parking'),
+('Drunk Driving', 2500, 6, 30, 'Driving under the influence of alcohol'),
+('Overspeeding', 1200, 2, 30, 'Driving above permitted speed');
+
+ALTER TABLE Violation ADD COLUMN ViolationType_ID INT;
+UPDATE Violation v
+SET ViolationType_ID = (
+    SELECT ViolationType_ID 
+    FROM Violation_Type vt
+    WHERE vt.Type_Name = v.Type
+);
+UPDATE Violation
+SET Type = 'Underage Driving'
+WHERE Type = 'Overspeeding';
+
+INSERT INTO Violation_Type 
+(Type_Name, Default_Amount, Default_Demerit_Points, Default_Duedays, Description)
+VALUES ('Underage Driving', 2000, 8, 30, 'Operating a vehicle below the legal driving age');
+
+DELETE FROM Violation_Type
+WHERE Type_Name = 'Overspeeding';
+
+UPDATE Violation
+SET ViolationType_ID = 6
+WHERE Type = 'Underage Driving';
+
+DELIMITER $$
+
+CREATE TRIGGER trg_auto_create_penalty
+AFTER INSERT ON Violation
+FOR EACH ROW
+BEGIN
+    DECLARE violation_amount DECIMAL(10,2);
+    SET violation_amount = CASE NEW.Type
+        WHEN 'Speeding' THEN 1000.00
+        WHEN 'Signal Jump' THEN 1500.00
+        WHEN 'Parking Violation' THEN 500.00
+        WHEN 'Drunk Driving' THEN 2500.00
+        WHEN 'Underage Driving' THEN 2000.00
+        WHEN 'Seatbelt Violation' THEN 500.00
+        WHEN 'Mobile Usage' THEN 1000.00
+        WHEN 'No Insurance' THEN 2300.00
+        ELSE 500.00
+    END;
+    INSERT INTO Penalty (Penalty_ID, Amount, Duedate, Status, Violation_ID)
+    VALUES (NEW.Violation_ID, violation_amount, DATE_ADD(CURRENT_DATE, INTERVAL 30 DAY), 'Unpaid', NEW.Violation_ID);
+END$$
+DELIMITER ;

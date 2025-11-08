@@ -514,3 +514,4 @@ JOIN Penalty p ON v.Violation_ID = p.Violation_ID;
 select * from Driver;
 select * from Vehicle;
 select * from payment;
+select * from penalty;
